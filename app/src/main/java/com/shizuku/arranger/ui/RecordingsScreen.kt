@@ -410,6 +410,7 @@ private fun PlayerBar(state: PlayerState, contactName: String?, vm: RecordingsVi
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                SpeedButton(state.speed, vm::setSpeed)
                 IconButton(onClick = vm::stop) { Icon(Icons.Default.Close, "Close player") }
             }
             if (state.error != null) {
@@ -441,6 +442,27 @@ private fun PlayerBar(state: PlayerState, contactName: String?, vm: RecordingsVi
         }
     }
 }
+
+@Composable
+private fun SpeedButton(speed: Float, onSelect: (Float) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }) {
+            Text(speedLabel(speed), fontWeight = FontWeight.Bold)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            PLAYBACK_SPEEDS.forEach { s ->
+                DropdownMenuItem(
+                    text = { Text(speedLabel(s), fontWeight = if (s == speed) FontWeight.Bold else null) },
+                    onClick = { onSelect(s); open = false },
+                )
+            }
+        }
+    }
+}
+
+private fun speedLabel(speed: Float): String =
+    (if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()) + "x"
 
 @Composable
 private fun FolderDialog(current: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {

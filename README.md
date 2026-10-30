@@ -17,7 +17,7 @@ through a file manager. It doesn't use Shizuku itself; it just reads the folder.
   Multiple words must all match, e.g. `jan 555`.
 - Filter chips: All / Incoming / Outgoing; sort by newest, oldest, longest, or number.
 - "All calls with this number" shortcut from each row's menu.
-- Built-in player with seek bar and ±10 s; share or delete a recording.
+- Built-in player with seek bar, ±10 s and speed (0.5x / 1x / 1.5x / 2x); share or delete a recording.
 
 ## Install
 

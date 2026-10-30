@@ -34,8 +34,11 @@ data class PlayerState(
     val isPlaying: Boolean = false,
     val positionMs: Int = 0,
     val durationMs: Int = 0,
+    val speed: Float = 1f,
     val error: String? = null,
 )
+
+val PLAYBACK_SPEEDS = listOf(0.5f, 1f, 1.5f, 2f)
 
 class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -96,6 +99,8 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
         all.map { it.size }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     private var mediaPlayer: MediaPlayer? = null
+    /** Kept across recordings so a chosen speed sticks. */
+    private var speed = 1f
     private var progressJob: Job? = null
     private var durationJob: Job? = null
 
@@ -155,14 +160,14 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
                     progressJob?.cancel()
                 }
                 prepare()
-                start()
             }
             mediaPlayer = mp
-            _player.value = PlayerState(recording, true, 0, mp.duration)
+            startAtSpeed(mp)
+            _player.value = PlayerState(recording, true, 0, mp.duration, speed)
             startProgress()
         } catch (e: Exception) {
             releasePlayer()
-            _player.value = PlayerState(recording, error = "Can't play this file: ${e.message ?: e.javaClass.simpleName}")
+            _player.value = PlayerState(recording, speed = speed, error = "Can't play this file: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 
@@ -174,7 +179,7 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
             _player.update { it.copy(isPlaying = false, positionMs = mp.currentPosition) }
         } else {
             if (mp.currentPosition >= mp.duration - 100) mp.seekTo(0)
-            mp.start()
+            startAtSpeed(mp)
             _player.update { it.copy(isPlaying = true) }
             startProgress()
         }
@@ -190,9 +195,26 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
         seekTo((mp.currentPosition + deltaMs).coerceIn(0, mp.duration))
     }
 
+    fun setSpeed(value: Float) {
+        speed = value
+        // Changing playback params on a paused player would resume it, so only apply while playing.
+        mediaPlayer?.takeIf { it.isPlaying }?.let { startAtSpeed(it) }
+        _player.update { it.copy(speed = value) }
+    }
+
+    /** Setting a non-zero speed also starts playback. Speed changes keep the original pitch. */
+    private fun startAtSpeed(mp: MediaPlayer) {
+        try {
+            mp.playbackParams = mp.playbackParams.setSpeed(speed)
+        } catch (_: Exception) {
+            // Some decoders refuse speed changes; fall back to normal speed.
+        }
+        if (!mp.isPlaying) mp.start()
+    }
+
     fun stop() {
         releasePlayer()
-        _player.value = PlayerState()
+        _player.value = PlayerState(speed = speed)
     }
 
     fun delete(recording: Recording) {
