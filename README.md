@@ -9,8 +9,10 @@ through a file manager. It doesn't use Shizuku itself; it just reads the folder.
 - Reads `/storage/emulated/0/call_recordings` (sub-folders included; folder can be changed via ⚙).
 - Understands the recorder's default name format `{date}_{direction}_{phone_number}`,
   e.g. `20240131_154502.123+0530_in_+15551234567.ogg`.
+- Shows the **saved contact name** for known numbers (asks for Contacts permission once;
+  if you decline, it just shows numbers).
 - Recordings grouped by day (Today / Yesterday / date) with direction, time, duration and size.
-- **Search** by phone number (punctuation ignored, so `555-123` finds `+1555123…`), date
+- **Search** by contact name, phone number (punctuation ignored, so `555-123` finds `+1555123…`), date
   (`2024-01-31`, `31/01/2024`, `jan`, `monday`), time (`14:30`) or direction (`incoming`, `out`).
   Multiple words must all match, e.g. `jan 555`.
 - Filter chips: All / Incoming / Outgoing; sort by newest, oldest, longest, or number.
@@ -24,7 +26,7 @@ Every push builds an APK in GitHub Actions: open the **Actions** tab → latest
 the `.apk` on your phone (allow "install unknown apps" when asked).
 
 On first launch, tap **Grant access** and enable **All files access** — Android requires it
-to read another app's audio files. The app has no internet permission.
+to read another app's audio files. You can also allow **Contacts** to see names. The app has no internet permission.
 
 ## Build locally
 

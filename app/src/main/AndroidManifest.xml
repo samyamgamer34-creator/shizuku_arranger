@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Optional: show saved contact names instead of bare numbers. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <!-- Android 10 and below -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"

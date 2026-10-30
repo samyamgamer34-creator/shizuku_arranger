@@ -1,8 +1,11 @@
 package com.shizuku.arranger.ui
 
+import android.Manifest
 import android.content.Intent
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -98,12 +101,20 @@ fun RecordingsScreen(vm: RecordingsViewModel = viewModel()) {
     val player by vm.player.collectAsStateWithLifecycle()
     val durations by vm.durationMap.collectAsStateWithLifecycle()
     val folder by vm.folder.collectAsStateWithLifecycle()
+    val names by vm.contactNames.collectAsStateWithLifecycle()
 
     var showSort by remember { mutableStateOf(false) }
     var showFolderDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Recording?>(null) }
 
-    LaunchedEffect(Unit) { vm.refresh() }
+    val contactsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.loadContactNames()
+    }
+    LaunchedEffect(Unit) {
+        vm.refresh()
+        // Optional: if declined, the app simply keeps showing numbers.
+        if (!vm.hasContactsPermission()) contactsLauncher.launch(Manifest.permission.READ_CONTACTS)
+    }
 
     Scaffold(
         topBar = {
@@ -139,7 +150,7 @@ fun RecordingsScreen(vm: RecordingsViewModel = viewModel()) {
         },
         bottomBar = {
             if (player.recording != null) {
-                PlayerBar(player, vm)
+                PlayerBar(player, player.recording?.let { names[it.phoneNumber] }, vm)
             }
         },
     ) { padding ->
@@ -148,7 +159,7 @@ fun RecordingsScreen(vm: RecordingsViewModel = viewModel()) {
                 value = query,
                 onValueChange = { vm.query.value = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                placeholder = { Text("Search number, date (2024-01-31, jan, monday)…") },
+                placeholder = { Text("Search name, number, date (jan, monday)…") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
@@ -187,7 +198,7 @@ fun RecordingsScreen(vm: RecordingsViewModel = viewModel()) {
                 InputChip(
                     selected = true,
                     onClick = { vm.numberFocus.value = null },
-                    label = { Text("Only ${number.ifEmpty { "unknown numbers" }}") },
+                    label = { Text("Only ${names[number] ?: number.ifEmpty { "unknown numbers" }}") },
                     trailingIcon = { Icon(Icons.Default.Close, "Show all", Modifier.size(18.dp)) },
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
@@ -206,6 +217,7 @@ fun RecordingsScreen(vm: RecordingsViewModel = viewModel()) {
                     RecordingList(
                         recordings = recordings,
                         durations = durations,
+                        names = names,
                         showDateHeaders = sort == SortOrder.NEWEST || sort == SortOrder.OLDEST,
                         player = player,
                         onPlay = vm::playOrToggle,
@@ -229,7 +241,7 @@ fun RecordingsScreen(vm: RecordingsViewModel = viewModel()) {
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("Delete recording?") },
-            text = { Text("${rec.displayNumber}\n${formatDateTime(rec.timestamp)}\n\nThis can't be undone.") },
+            text = { Text("${names[rec.phoneNumber] ?: rec.displayNumber}\n${formatDateTime(rec.timestamp)}\n\nThis can't be undone.") },
             confirmButton = {
                 TextButton(onClick = { vm.delete(rec); pendingDelete = null }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -245,6 +257,7 @@ fun RecordingsScreen(vm: RecordingsViewModel = viewModel()) {
 private fun RecordingList(
     recordings: List<Recording>,
     durations: Map<String, Long>,
+    names: Map<String, String>,
     showDateHeaders: Boolean,
     player: PlayerState,
     onPlay: (Recording) -> Unit,
@@ -277,6 +290,7 @@ private fun RecordingList(
                 RecordingRow(
                     rec = rec,
                     durationMs = durations[rec.file.path],
+                    contactName = names[rec.phoneNumber],
                     isCurrent = player.recording?.file == rec.file,
                     isPlaying = player.recording?.file == rec.file && player.isPlaying,
                     onPlay = { onPlay(rec) },
@@ -292,6 +306,7 @@ private fun RecordingList(
 private fun RecordingRow(
     rec: Recording,
     durationMs: Long?,
+    contactName: String?,
     isCurrent: Boolean,
     isPlaying: Boolean,
     onPlay: () -> Unit,
@@ -324,7 +339,7 @@ private fun RecordingRow(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    rec.displayNumber,
+                    contactName ?: rec.displayNumber,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -332,6 +347,7 @@ private fun RecordingRow(
                 )
                 Text(
                     listOfNotNull(
+                        contactName?.let { rec.phoneNumber },
                         dirLabel,
                         formatTime(rec.timestamp),
                         durationMs?.let { formatDuration(it) },
@@ -380,16 +396,16 @@ private fun RecordingRow(
 }
 
 @Composable
-private fun PlayerBar(state: PlayerState, vm: RecordingsViewModel) {
+private fun PlayerBar(state: PlayerState, contactName: String?, vm: RecordingsViewModel) {
     val rec = state.recording ?: return
     var dragging by remember { mutableStateOf<Float?>(null) }
     Surface(tonalElevation = 6.dp, shadowElevation = 8.dp) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(rec.displayNumber, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(contactName ?: rec.displayNumber, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     Text(
-                        formatDateTime(rec.timestamp),
+                        listOfNotNull(contactName?.let { rec.phoneNumber }, formatDateTime(rec.timestamp)).joinToString("  ·  "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

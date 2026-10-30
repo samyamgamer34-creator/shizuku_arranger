@@ -4,6 +4,7 @@ import android.app.Application
 import android.media.MediaPlayer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.shizuku.arranger.data.ContactResolver
 import com.shizuku.arranger.data.Direction
 import com.shizuku.arranger.data.Recording
 import com.shizuku.arranger.data.RecordingRepository
@@ -42,6 +43,10 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val all = MutableStateFlow<List<Recording>>(emptyList())
     private val durations = MutableStateFlow<Map<String, Long>>(emptyMap())
+    private val contacts = ContactResolver(app)
+    private val _contactNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    /** Phone number (as in the file name) -> saved contact name. */
+    val contactNames: StateFlow<Map<String, String>> = _contactNames.asStateFlow()
 
     val query = MutableStateFlow("")
     val filter = MutableStateFlow(DirectionFilter.ALL)
@@ -61,7 +66,7 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
     val durationMap: StateFlow<Map<String, Long>> = durations.asStateFlow()
 
     val visible: StateFlow<List<Recording>> =
-        combine(all, query, filter, sort, combine(numberFocus, durations, ::Pair)) { list, q, f, s, (focus, durs) ->
+        combine(all, query, filter, sort, combine(numberFocus, durations, _contactNames, ::Triple)) { list, q, f, s, (focus, durs, names) ->
             list.asSequence()
                 .filter { focus == null || it.phoneNumber == focus }
                 .filter {
@@ -71,13 +76,17 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
                         DirectionFilter.OUTGOING -> it.direction == Direction.OUTGOING
                     }
                 }
-                .filter { matches(it, q) }
+                .filter { matches(it, q, names[it.phoneNumber]) }
                 .let { seq ->
                     when (s) {
                         SortOrder.NEWEST -> seq.sortedByDescending { it.timestamp }
                         SortOrder.OLDEST -> seq.sortedBy { it.timestamp }
                         SortOrder.LONGEST -> seq.sortedByDescending { durs[it.file.path] ?: 0L }
-                        SortOrder.NUMBER -> seq.sortedWith(compareBy<Recording> { it.phoneNumber.ifEmpty { "￿" } }.thenByDescending { it.timestamp })
+                        SortOrder.NUMBER -> seq.sortedWith(
+                            // Unknown numbers sort last.
+                            compareBy<Recording> { (names[it.phoneNumber] ?: it.phoneNumber).lowercase().ifEmpty { "\uFFFF" } }
+                                .thenByDescending { it.timestamp },
+                        )
                     }
                 }
                 .toList()
@@ -96,9 +105,20 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
             val list = withContext(Dispatchers.IO) { repository.loadRecordings() }
             all.value = list
             _loading.value = false
+            loadContactNames()
             loadDurations(list)
         }
     }
+
+    /** Also called after the user grants the contacts permission. */
+    fun loadContactNames() {
+        viewModelScope.launch {
+            val numbers = all.value.map { it.phoneNumber }.toSet()
+            _contactNames.value = withContext(Dispatchers.IO) { contacts.resolve(numbers) }
+        }
+    }
+
+    fun hasContactsPermission(): Boolean = contacts.hasPermission()
 
     private fun loadDurations(list: List<Recording>) {
         durationJob?.cancel()
@@ -207,15 +227,16 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
         private val SEARCH_DATE_FORMATS = listOf("yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy", "d MMM yyyy", "MMMM", "MMM", "EEEE", "HH:mm")
 
         /**
-         * Free-text search: matches the phone number (ignoring spaces, dashes, +), the direction
+         * Free-text search: matches the contact name, phone number (ignoring spaces, dashes, +), the direction
          * ("in"/"incoming"/"out"/"outgoing"), dates like "2024-01-31", "31/01", "jan", "monday",
          * or the raw file name. Several words must all match.
          */
-        fun matches(r: Recording, query: String): Boolean {
+        fun matches(r: Recording, query: String, contactName: String? = null): Boolean {
             val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
             if (words.isEmpty()) return true
             val date = Date(r.timestamp)
             val haystack = buildString {
+                contactName?.let { append(it.lowercase()).append(' ') }
                 append(r.phoneNumber.lowercase()).append(' ')
                 append(r.file.name.lowercase()).append(' ')
                 append(
