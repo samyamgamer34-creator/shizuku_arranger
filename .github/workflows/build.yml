@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -29,3 +31,16 @@ jobs:
         with:
           name: CallRecordings-apk
           path: app/build/outputs/apk/release/*.apk
+
+      # Public download link that needs no GitHub login:
+      # https://github.com/<owner>/<repo>/releases/latest/download/CallRecordings.apk
+      - name: Publish APK to release
+        if: github.event_name != 'pull_request'
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk CallRecordings.apk
+          git tag -f latest
+          git push -f origin latest
+          gh release view latest >/dev/null 2>&1 || gh release create latest --title "Call Recordings (latest build)" --notes "Install CallRecordings.apk on your phone."
+          gh release upload latest CallRecordings.apk --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

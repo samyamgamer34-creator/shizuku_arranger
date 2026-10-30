@@ -21,9 +21,11 @@ through a file manager. It doesn't use Shizuku itself; it just reads the folder.
 
 ## Install
 
-Every push builds an APK in GitHub Actions: open the **Actions** tab → latest
-**Build APK** run → download the `CallRecordings-apk` artifact, unzip, and install
-the `.apk` on your phone (allow "install unknown apps" when asked).
+Download the latest APK straight on your phone (no GitHub login needed):
+
+**https://github.com/samyamgamer34-creator/shizuku_arranger/releases/latest/download/CallRecordings.apk**
+
+Open it and install (allow "install unknown apps" when asked). Every push rebuilds it.
 
 On first launch, tap **Grant access** and enable **All files access** — Android requires it
 to read another app's audio files. You can also allow **Contacts** to see names. The app has no internet permission.
